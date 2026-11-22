@@ -1,7 +1,7 @@
 use crate::error::VenturiError;
 use crate::models::{
     BoundaryKind, BoundaryPatch, CfdCase, DomainBox, DomainFace, FlowRegime, FluidConfig,
-    GuardrailsConfig, IterationRecord, OpenFoamFlavor, OpenFoamResultSummary, OptimizationGoal,
+    GuardrailsConfig, IterationRecord, OpenFoamResultSummary, OptimizationGoal,
     ParametricGeometrySpec, PresetGeometryKind, RefinementBox, SchemeAccuracy, TurbulenceIC,
     TurbulenceIcInput, TurbulenceModel, YPlusInput,
 };
@@ -1818,10 +1818,7 @@ async fn run_openfoam_allrun(
     use_docker: bool,
 ) -> Result<(), VenturiError> {
     let mut cmd = if use_docker {
-        let image = match case.flavor {
-            OpenFoamFlavor::FoundationV14 => "openfoam/openfoam14-paraview512",
-            OpenFoamFlavor::OpenCfdV2606 => "opencfd/openfoam-default:2512",
-        };
+        let image = crate::openfoam::runner::docker_image_for_flavor(case.flavor);
         let mut c = Command::new("docker");
         c.args([
             "run",
@@ -1831,13 +1828,13 @@ async fn run_openfoam_allrun(
             "-w",
             "/case",
             image,
-            "sh",
+            "bash",
             "-c",
-            "cd /case && ./Allrun",
+            "cd /case && bash ./Allrun",
         ]);
         c
     } else {
-        let mut c = Command::new("sh");
+        let mut c = Command::new("bash");
         c.arg("./Allrun").current_dir(case_dir);
         c
     };
@@ -1848,12 +1845,34 @@ async fn run_openfoam_allrun(
         .map_err(|e| VenturiError::Execution(format!("Failed to invoke OpenFOAM Allrun: {}", e)))?;
 
     // Save combined log for post-mortem inspection if needed
+    let stderr_str = String::from_utf8_lossy(&output.stderr);
     let combined = format!(
         "{}\n{}",
         String::from_utf8_lossy(&output.stdout),
-        String::from_utf8_lossy(&output.stderr)
+        stderr_str
     );
     let _ = std::fs::write(case_dir.join("log.allrun"), combined);
+
+    if !output.status.success() {
+        let snippet: String = stderr_str
+            .lines()
+            .rev()
+            .take(6)
+            .collect::<Vec<_>>()
+            .into_iter()
+            .rev()
+            .collect::<Vec<_>>()
+            .join(" | ");
+        return Err(VenturiError::Execution(format!(
+            "OpenFOAM Allrun failed ({}): {}",
+            output.status,
+            if snippet.is_empty() {
+                "see log.allrun for details".to_string()
+            } else {
+                snippet
+            }
+        )));
+    }
 
     Ok(())
 }

@@ -153,6 +153,16 @@ pub async fn launch_solver(
     Ok(run_id)
 }
 
+/// Resolves an official, pullable Docker Hub image for the selected OpenFOAM flavor.
+pub fn docker_image_for_flavor(flavor: OpenFoamFlavor) -> &'static str {
+    match flavor {
+        // Official OpenFOAM Foundation image on Docker Hub supporting `foamRun`,
+        // `constant/physicalProperties`, and `constant/momentumTransport`.
+        OpenFoamFlavor::FoundationV14 => "openfoam/openfoam11-paraview510",
+        OpenFoamFlavor::OpenCfdV2606 => "opencfd/openfoam-default:2512",
+    }
+}
+
 async fn run_external_openfoam(
     app: &AppHandle,
     state: &Arc<RunnerState>,
@@ -175,10 +185,7 @@ async fn run_external_openfoam(
     emit_status(app, run_id, "running");
 
     let mut cmd = if use_docker {
-        let image = match case.flavor {
-            OpenFoamFlavor::FoundationV14 => "openfoam/openfoam14-paraview512",
-            OpenFoamFlavor::OpenCfdV2606 => "opencfd/openfoam-default:2512",
-        };
+        let image = docker_image_for_flavor(case.flavor);
         emit_log(
             app,
             run_id,
@@ -193,9 +200,9 @@ async fn run_external_openfoam(
             "-w",
             "/case",
             image,
-            "sh",
+            "bash",
             "-c",
-            "cd /case && ./Allrun",
+            "cd /case && bash ./Allrun",
         ]);
         c
     } else {
@@ -207,7 +214,7 @@ async fn run_external_openfoam(
                 resolve_solver_name(case.flavor, case.physics.regime)
             ),
         );
-        let mut c = Command::new("sh");
+        let mut c = Command::new("bash");
         c.arg("./Allrun").current_dir(&dir);
         c
     };
@@ -221,6 +228,20 @@ async fn run_external_openfoam(
         .stdout
         .take()
         .ok_or_else(|| VenturiError::Execution("Unable to capture stdout".into()))?;
+    let stderr = child.stderr.take();
+
+    let stderr_handle = stderr.map(|err_pipe| {
+        let app_err = app.clone();
+        let run_id_err = run_id.to_string();
+        tokio::spawn(async move {
+            let mut err_reader = BufReader::new(err_pipe).lines();
+            while let Ok(Some(line)) = err_reader.next_line().await {
+                if !line.trim().is_empty() {
+                    emit_log(&app_err, &run_id_err, format!("[stderr] {}", line));
+                }
+            }
+        })
+    });
 
     let mut reader = BufReader::new(stdout).lines();
 
@@ -305,6 +326,10 @@ async fn run_external_openfoam(
         .wait()
         .await
         .map_err(|e| VenturiError::Execution(e.to_string()))?;
+
+    if let Some(handle) = stderr_handle {
+        let _ = handle.await;
+    }
 
     if status.success() {
         emit_log(app, run_id, "[Venturi] OpenFOAM execution completed successfully.".into());
