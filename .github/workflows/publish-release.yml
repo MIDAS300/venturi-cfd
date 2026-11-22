@@ -1,0 +1,67 @@
+name: Publish Windows Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: "Workflow run ID containing venturi-cfd-windows-x64 artifact"
+        required: true
+        type: string
+      tag:
+        description: "Release tag name"
+        required: true
+        default: "v0.2.0-carmelo"
+        type: string
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download compiled Windows executables
+        uses: actions/download-artifact@v4
+        with:
+          name: venturi-cfd-windows-x64
+          run-id: ${{ inputs.run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: dist-win
+      - name: Inspect and package artifacts
+        run: |
+          find dist-win -type f -exec ls -lh {} +
+          mkdir -p release-assets Venturi_CFD_v0.2_Windows_x64
+          VENTURI_CFD=$(find dist-win -name 'venturi-cfd.exe' | head -n 1)
+          VENTURI_MCP=$(find dist-win -name 'venturi-mcp.exe' | head -n 1)
+          NSIS_SETUP=$(find dist-win -name '*setup*.exe' | head -n 1)
+          cp "$VENTURI_CFD" Venturi_CFD_v0.2_Windows_x64/venturi-cfd.exe
+          cp "$VENTURI_MCP" Venturi_CFD_v0.2_Windows_x64/venturi-mcp.exe
+          cp README.md Venturi_CFD_v0.2_Windows_x64/README.md
+          cat <<'EOF' > Venturi_CFD_v0.2_Windows_x64/venturi_mcp_windows_config.json
+          {
+            "mcpServers": {
+              "venturi": {
+                "command": "C:\\Program Files\\Venturi CFD\\venturi-mcp.exe",
+                "args": ["--session", "C:\\Users\\<YOUR_USER>\\.venturi\\active_session.json"]
+              }
+            }
+          }
+          EOF
+          zip -r release-assets/Venturi_CFD_v0.2_Windows_x64_Portable.zip Venturi_CFD_v0.2_Windows_x64
+          cp "$VENTURI_MCP" release-assets/venturi-mcp.exe
+          cp "$NSIS_SETUP" "release-assets/Venturi CFD_0.2.0_x64-setup.exe"
+          ls -lh release-assets
+      - name: Create or update GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ inputs.tag }}"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" release-assets/* --clobber
+          else
+            gh release create "$TAG" release-assets/* \
+              --title "Venturi CFD v0.2.0 — Carmelo Version (Windows x64)" \
+              --notes "Compiled Windows x64 binaries from updated Carmelo Version source code."
+          fi
