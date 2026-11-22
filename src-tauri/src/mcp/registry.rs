@@ -1833,7 +1833,7 @@ async fn run_openfoam_allrun(
             image,
             "sh",
             "-c",
-            "./Allrun",
+            "cd /case && ./Allrun",
         ]);
         c
     } else {

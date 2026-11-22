@@ -195,7 +195,7 @@ async fn run_external_openfoam(
             image,
             "sh",
             "-c",
-            "./Allrun",
+            "cd /case && ./Allrun",
         ]);
         c
     } else {
