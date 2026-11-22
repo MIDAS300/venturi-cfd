@@ -1,6 +1,6 @@
 [package]
 name = "venturi-cfd"
-version = "0.2.0"
+version = "0.3.0"
 description = "Venturi — Native Rust Desktop CFD Engineering Studio & MCP Server for OpenFOAM"
 authors = ["Venturi Engineering"]
 license = "MIT"

@@ -891,7 +891,7 @@ export const App: React.FC = () => {
           </span>
         </div>
         <div style={{ flexShrink: 0 }}>
-          Venturi CFD v0.2 · MIT Stack · MCP Server Ready · Compatible with OpenFOAM®
+          Venturi CFD v0.3 · MIT Stack · MCP Server Ready · Compatible with OpenFOAM®
         </div>
       </footer>
     </div>

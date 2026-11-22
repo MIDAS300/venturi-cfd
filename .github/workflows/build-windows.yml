@@ -6,6 +6,9 @@ on:
     tags:
       - "v*"
 
+permissions:
+  contents: write
+
 jobs:
   build-windows:
     runs-on: windows-latest
@@ -25,6 +28,28 @@ jobs:
         run: cargo build --release --bin venturi-mcp
       - name: Build Tauri Windows NSIS installer & venturi-cfd.exe
         run: npm run tauri build -- --bundles nsis
+      - name: Package Portable ZIP and Release Assets
+        shell: bash
+        run: |
+          mkdir -p release-assets Venturi_CFD_v0.3_Windows_x64
+          cp src-tauri/target/release/venturi-cfd.exe Venturi_CFD_v0.3_Windows_x64/venturi-cfd.exe
+          cp src-tauri/target/release/venturi-mcp.exe Venturi_CFD_v0.3_Windows_x64/venturi-mcp.exe
+          cp README.md Venturi_CFD_v0.3_Windows_x64/README.md
+          cat <<'EOF' > Venturi_CFD_v0.3_Windows_x64/venturi_mcp_windows_config.json
+          {
+            "mcpServers": {
+              "venturi": {
+                "command": "C:\\Program Files\\Venturi CFD\\venturi-mcp.exe",
+                "args": ["--session", "C:\\Users\\<YOUR_USER>\\.venturi\\active_session.json"]
+              }
+            }
+          }
+          EOF
+          powershell -Command "Compress-Archive -Path 'Venturi_CFD_v0.3_Windows_x64' -DestinationPath 'release-assets/Venturi_CFD_v0.3_Windows_x64_Portable.zip' -Force"
+          cp src-tauri/target/release/venturi-mcp.exe release-assets/venturi-mcp.exe
+          NSIS_SETUP=$(find src-tauri/target/release/bundle/nsis -name '*-setup.exe' | head -n 1)
+          cp "$NSIS_SETUP" "release-assets/Venturi CFD_0.3.0_x64-setup.exe"
+          ls -lh release-assets
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -33,3 +58,18 @@ jobs:
             src-tauri/target/release/venturi-cfd.exe
             src-tauri/target/release/venturi-mcp.exe
             src-tauri/target/release/bundle/nsis/*.exe
+            release-assets/Venturi_CFD_v0.3_Windows_x64_Portable.zip
+      - name: Publish GitHub Release on Tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" release-assets/* --clobber
+          else
+            gh release create "$TAG" release-assets/* \
+              --title "Venturi CFD ${TAG} (Windows x64)" \
+              --notes "Venturi CFD ${TAG} Windows x64 NSIS Installer, MCP Server, and Portable Package."
+          fi

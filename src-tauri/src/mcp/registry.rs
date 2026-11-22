@@ -27,7 +27,7 @@ use tokio::process::Command;
 
 const MCP_PROTOCOL_VERSION: &str = "2024-11-05";
 const SERVER_NAME: &str = "venturi-mcp";
-const SERVER_VERSION: &str = "0.2.0";
+const SERVER_VERSION: &str = "0.3.0";
 
 /// Returns complete MCP tool schemas (`name`, `description`, `inputSchema`) for all Venturi CFD tools.
 pub fn tool_definitions() -> Vec<Value> {
