@@ -163,6 +163,26 @@ pub fn docker_image_for_flavor(flavor: OpenFoamFlavor) -> &'static str {
     }
 }
 
+/// Converts Windows drive paths (`C:\Users\...`) to Docker-compatible POSIX paths (`/c/Users/...`)
+/// so `-v <host>:/case` works cleanly on both Docker Desktop and Docker Toolbox without
+/// `invalid mode: /case` colon-parsing errors.
+pub fn format_docker_host_path(dir: &std::path::Path) -> String {
+    let raw = dir.to_string_lossy();
+    let stripped = raw.strip_prefix(r"\\?\").unwrap_or(&raw);
+    let bytes = stripped.as_bytes();
+    if bytes.len() >= 3
+        && bytes[0].is_ascii_alphabetic()
+        && bytes[1] == b':'
+        && (bytes[2] == b'\\' || bytes[2] == b'/')
+    {
+        let drive = (bytes[0] as char).to_ascii_lowercase();
+        let rest = stripped[3..].replace('\\', "/");
+        format!("/{}/{}", drive, rest)
+    } else {
+        stripped.to_string()
+    }
+}
+
 async fn run_external_openfoam(
     app: &AppHandle,
     state: &Arc<RunnerState>,
@@ -186,6 +206,7 @@ async fn run_external_openfoam(
 
     let mut cmd = if use_docker {
         let image = docker_image_for_flavor(case.flavor);
+        let host_mount = format_docker_host_path(&dir);
         emit_log(
             app,
             run_id,
@@ -196,7 +217,7 @@ async fn run_external_openfoam(
             "run",
             "--rm",
             "-v",
-            &format!("{}:/case", dir.display()),
+            &format!("{}:/case", host_mount),
             "-w",
             "/case",
             image,
@@ -502,3 +523,28 @@ fn emit_status(app: &AppHandle, run_id: &str, status: &str) {
         },
     );
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::Path;
+
+    #[test]
+    fn converts_windows_drive_paths_for_docker_mounts() {
+        assert_eq!(
+            format_docker_host_path(Path::new(
+                r"C:\Users\carme\AppData\Local\Temp\venturi_naca0012_wind_tunnel"
+            )),
+            "/c/Users/carme/AppData/Local/Temp/venturi_naca0012_wind_tunnel"
+        );
+        assert_eq!(
+            format_docker_host_path(Path::new(r"\\?\D:\cfd\case_01")),
+            "/d/cfd/case_01"
+        );
+        assert_eq!(
+            format_docker_host_path(Path::new("/tmp/venturi_case")),
+            "/tmp/venturi_case"
+        );
+    }
+}
+

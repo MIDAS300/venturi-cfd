@@ -1819,12 +1819,13 @@ async fn run_openfoam_allrun(
 ) -> Result<(), VenturiError> {
     let mut cmd = if use_docker {
         let image = crate::openfoam::runner::docker_image_for_flavor(case.flavor);
+        let host_mount = crate::openfoam::runner::format_docker_host_path(case_dir);
         let mut c = Command::new("docker");
         c.args([
             "run",
             "--rm",
             "-v",
-            &format!("{}:/case", case_dir.display()),
+            &format!("{}:/case", host_mount),
             "-w",
             "/case",
             image,
