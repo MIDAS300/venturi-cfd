@@ -216,6 +216,8 @@ async fn run_external_openfoam(
         c.args([
             "run",
             "--rm",
+            "--entrypoint",
+            "",
             "-v",
             &format!("{}:/case", host_mount),
             "-w",

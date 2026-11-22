@@ -830,7 +830,7 @@ addLayersControls
     nSmoothThickness 10;
     maxFaceThicknessRatio 0.5;
     maxThicknessToMedialRatio 0.3;
-    minMedianAxisAngle 90;
+    minMedialAxisAngle 90;
     nBufferCellsNoExtrude 0;
     nLayerIter 50;
 }}
@@ -1386,7 +1386,7 @@ bash ./Allrun
 
 ### Via Docker (macOS / Windows / Linux)
 ```bash
-docker run --rm -it -v "$PWD:/case" -w /case {docker_img} bash -c "cd /case && bash ./Allrun"
+docker run --rm -it --entrypoint "" -v "$PWD:/case" -w /case {docker_img} bash -c "cd /case && bash ./Allrun"
 ```
 "#,
         name = case.name,

@@ -1824,6 +1824,8 @@ async fn run_openfoam_allrun(
         c.args([
             "run",
             "--rm",
+            "--entrypoint",
+            "",
             "-v",
             &format!("{}:/case", host_mount),
             "-w",
